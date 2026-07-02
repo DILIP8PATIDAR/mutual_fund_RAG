@@ -2,11 +2,20 @@
 
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+
+
+def _resolve_project_path(value: Path) -> Path:
+    """Anchor relative paths to the repo root (not the process cwd)."""
+    path = Path(value)
+    if path.is_absolute():
+        return path
+    return (PROJECT_ROOT / path).resolve()
 
 
 class Settings(BaseSettings):
@@ -33,6 +42,19 @@ class Settings(BaseSettings):
     urls_file: Path = Field(default=PROJECT_ROOT / "data" / "urls.json")
     raw_data_dir: Path = Field(default=PROJECT_ROOT / "data" / "raw")
     processed_data_dir: Path = Field(default=PROJECT_ROOT / "data" / "processed")
+
+    @field_validator(
+        "vector_db_path",
+        "urls_file",
+        "raw_data_dir",
+        "processed_data_dir",
+        mode="before",
+    )
+    @classmethod
+    def resolve_path_fields(cls, value: Any) -> Path:
+        if value is None or (isinstance(value, str) and not value.strip()):
+            raise ValueError("path must not be empty")
+        return _resolve_project_path(Path(value))
 
     @property
     def project_root(self) -> Path:

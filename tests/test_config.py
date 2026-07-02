@@ -15,6 +15,16 @@ def test_settings_load_with_defaults():
     assert settings.similarity_threshold == 0.65
 
 
+def test_relative_paths_resolve_from_project_root(monkeypatch, tmp_path):
+    """Paths from .env must not depend on the process working directory."""
+    monkeypatch.chdir(tmp_path)
+    get_settings.cache_clear()
+    settings = get_settings()
+    assert settings.vector_db_path.is_absolute()
+    assert settings.vector_db_path == (PROJECT_ROOT / "data" / "chroma").resolve()
+    assert settings.processed_data_dir == (PROJECT_ROOT / "data" / "processed").resolve()
+
+
 def test_urls_json_has_five_groww_schemes():
     urls_path = PROJECT_ROOT / "data" / "urls.json"
     schemes = json.loads(urls_path.read_text(encoding="utf-8"))
