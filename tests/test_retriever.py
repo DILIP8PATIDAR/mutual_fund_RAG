@@ -36,6 +36,16 @@ def test_detect_scheme_resolves_single_scheme():
     assert detect_scheme("HDFC Silver ETF objective") == (
         "HDFC Silver ETF FOF Direct Growth"
     )
+    assert detect_scheme("HDFC Large Cap Fund Direct Growth - NAV") == (
+        "HDFC Large Cap Fund Direct Growth"
+    )
+
+
+def test_detect_section_types_nav_intent():
+    assert detect_section_types("what is the NAV for HDFC Silver ETF") == (
+        "nav",
+        "fund_details",
+    )
 
 
 def test_detect_scheme_ambiguous_or_missing_returns_none():
@@ -85,6 +95,21 @@ def test_retrieve_live_expense_ratio():
     )
     assert outcome.results[0].metadata["section_type"] in {"fund_details", "exit_load"}
     assert outcome.source_url.startswith("https://groww.in/mutual-funds/")
+
+
+@pytest.mark.integration
+def test_retrieve_live_nav():
+    """Requires a built Chroma index with dedicated NAV chunks."""
+    if collection_count() == 0:
+        pytest.skip("Empty index; run scripts/build_corpus.py --skip-fetch first")
+
+    outcome = retrieve("What is the NAV for HDFC Silver ETF FOF Direct Growth?")
+    assert outcome.scheme == "HDFC Silver ETF FOF Direct Growth"
+    assert outcome.section_types[0] == "nav"
+    assert not outcome.low_confidence
+    assert outcome.results
+    assert outcome.results[0].metadata["section_type"] == "nav"
+    assert "NAV ₹" in outcome.results[0].text
 
 
 @pytest.mark.integration

@@ -19,6 +19,7 @@ if str(_PROJECT_ROOT) not in sys.path:
 import streamlit as st
 
 from src.api.chat_service import process_chat
+from src.index.vector_store import collection_count, get_collection
 from src.ingest.fetcher import load_scheme_urls
 from src.rag.generator import DISCLAIMER
 
@@ -35,6 +36,10 @@ EXAMPLE_QUESTIONS: list[tuple[str, str]] = [
         "What is the minimum SIP for HDFC Large Cap Fund?",
     ),
     (
+        "NAV Silver ETF",
+        "What is the NAV for HDFC Silver ETF FOF Direct Growth?",
+    ),
+    (
         "Exit load Small Cap",
         "What is the exit load on HDFC Small Cap Fund?",
     ),
@@ -48,6 +53,31 @@ ERROR_MESSAGE = (
     "Sorry, something went wrong while processing your question. "
     "Please try again."
 )
+
+INDEX_EMPTY_WARNING = (
+    "The vector index is empty or missing. NAV and other answers need a built "
+    "corpus. Run: `python scripts/build_corpus.py --skip-fetch` then restart this app."
+)
+
+INDEX_STALE_NAV_WARNING = (
+    "The vector index has no NAV chunks (likely built before the NAV fix). "
+    "Run: `python scripts/rebuild_index.py` then restart this app."
+)
+
+
+def _index_warning() -> str | None:
+    try:
+        if collection_count() == 0:
+            return INDEX_EMPTY_WARNING
+        nav_ids = get_collection().get(
+            where={"section_type": "nav"},
+            include=[],
+        )["ids"]
+        if not nav_ids:
+            return INDEX_STALE_NAV_WARNING
+    except Exception:
+        return INDEX_EMPTY_WARNING
+    return None
 
 
 def _source_label(url: str) -> str:
@@ -138,6 +168,9 @@ def main() -> None:
         f'<div class="disclaimer-banner">{DISCLAIMER}</div>',
         unsafe_allow_html=True,
     )
+
+    if warning := _index_warning():
+        st.warning(warning)
 
     with st.expander("About this assistant", expanded=not st.session_state.messages):
         st.markdown(WELCOME_TEXT)

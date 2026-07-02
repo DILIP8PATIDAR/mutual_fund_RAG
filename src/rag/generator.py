@@ -26,7 +26,7 @@ DISCLAIMER = "Facts-only. No investment advice."
 LOW_CONFIDENCE_MESSAGE = (
     "I don't have enough information from the HDFC scheme pages to answer that. "
     "Try naming one of the supported schemes (for example, HDFC Mid Cap Fund) "
-    "and ask about a specific fact like expense ratio, exit load, or minimum SIP."
+    "and ask about a specific fact like NAV, expense ratio, exit load, or minimum SIP."
 )
 
 MISSING_KEY_MESSAGE = (

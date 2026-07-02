@@ -114,7 +114,22 @@ def detect_scheme(query: str) -> str | None:
     Returns ``None`` when no alias matches or when aliases for *different*
     schemes both appear (ambiguous / comparative — deferred to Phase 3).
     """
-    text = f" {query.lower()} "
+    from src.ingest.fetcher import load_scheme_urls
+
+    text_lower = query.lower()
+
+    # Full scheme name match (longest first) handles queries like
+    # "HDFC Large Cap Fund Direct Growth - NAV" without relying on aliases.
+    matched_names: set[str] = set()
+    for entry in sorted(load_scheme_urls(), key=lambda e: len(e.scheme), reverse=True):
+        if entry.scheme.lower() in text_lower:
+            matched_names.add(entry.scheme)
+    if len(matched_names) == 1:
+        return next(iter(matched_names))
+    if len(matched_names) > 1:
+        return None
+
+    text = f" {text_lower} "
     fragment_to_scheme = _load_scheme_by_category_fragment()
 
     matched_fragments: set[str] = set()
