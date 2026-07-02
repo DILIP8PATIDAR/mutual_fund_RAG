@@ -1,0 +1,19 @@
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Generated data (keep data/urls.json tracked)
+data/*
+!data/urls.json
+
+# IDE
+.idea/
+.vscode/
+*.swp
+.DS_Store
