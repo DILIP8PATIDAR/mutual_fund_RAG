@@ -14,8 +14,7 @@ if str(PROJECT_ROOT) not in sys.path:
 
 from src.config import settings
 from src.ingest.chunker import read_chunks_jsonl
-from src.index.embedder import embed_passages
-from src.index.vector_store import collection_count, reset_collection, upsert_chunks
+from src.index.bootstrap import rebuild_index_from_chunks
 
 logger = logging.getLogger(__name__)
 
@@ -27,31 +26,10 @@ def rebuild_index(
 ) -> dict[str, int | str]:
     """Re-embed existing chunk rows and replace the vector index."""
     path = chunks_path or (settings.processed_data_dir / "chunks.jsonl")
-    if not path.is_file():
-        raise FileNotFoundError(
-            f"Missing {path}. Run scripts/build_corpus.py first."
-        )
-
-    chunks = read_chunks_jsonl(path)
-    if not chunks:
-        raise RuntimeError(f"No chunk rows found in {path}")
-
-    texts = [str(row["text"]) for row in chunks]
-    logger.info(
-        "Re-embedding %s chunks from %s with %s...",
-        len(texts),
-        path,
-        settings.embedding_model,
-    )
-    embeddings = embed_passages(texts)
-
-    collection = reset_collection(persist_directory=vector_db_path)
-    upsert_chunks(chunks, embeddings, collection=collection)
-    indexed = collection_count(collection)
-    logger.info("Rebuilt index: %s vectors in collection 'hdfc_mf_corpus'", indexed)
-
+    chunk_count = len(read_chunks_jsonl(path))
+    indexed = rebuild_index_from_chunks(path, vector_db_path=vector_db_path)
     return {
-        "chunks": len(chunks),
+        "chunks": chunk_count,
         "indexed": indexed,
         "chunks_path": str(path),
         "vector_db_path": str(vector_db_path or settings.vector_db_path),

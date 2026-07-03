@@ -8,12 +8,18 @@ __pycache__/
 .mypy_cache/
 .ruff_cache/
 
-# Generated data (keep data/urls.json tracked)
+# Generated data (keep bootstrap artifacts tracked for Streamlit Cloud)
 data/*
 !data/urls.json
+!data/processed/
+data/processed/*
+!data/processed/chunks.jsonl
 
 # IDE
 .idea/
 .vscode/
 *.swp
 .DS_Store
+
+# Streamlit secrets (use .streamlit/secrets.toml.example as template)
+.streamlit/secrets.toml

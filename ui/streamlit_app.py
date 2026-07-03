@@ -8,6 +8,7 @@ Calls ``process_chat()`` directly (no separate API process required).
 
 from __future__ import annotations
 
+import os
 import sys
 from pathlib import Path
 
@@ -18,7 +19,47 @@ if str(_PROJECT_ROOT) not in sys.path:
 
 import streamlit as st
 
+_SECRET_KEYS = (
+    "GROQ_API_KEY",
+    "LLM_MODEL",
+    "EMBEDDING_MODEL",
+    "VECTOR_DB_PATH",
+    "TOP_K",
+    "SIMILARITY_THRESHOLD",
+    "LLM_TEMPERATURE",
+    "LLM_MAX_TOKENS",
+    "LLM_CONTEXT_CHAR_BUDGET",
+    "GROQ_MAX_RETRIES",
+    "GROQ_TIMEOUT_SEC",
+)
+
+
+def _load_deploy_secrets() -> None:
+    """Map Streamlit Cloud secrets into os.environ for pydantic-settings."""
+    try:
+        secrets = st.secrets
+    except Exception:
+        return
+
+    for key in _SECRET_KEYS:
+        if key in secrets:
+            os.environ.setdefault(key, str(secrets[key]))
+
+    env_section = secrets.get("env", {})
+    if isinstance(env_section, dict):
+        for key in _SECRET_KEYS:
+            if key in env_section:
+                os.environ.setdefault(key, str(env_section[key]))
+
+    from src.config import get_settings
+
+    get_settings.cache_clear()
+
+
+_load_deploy_secrets()
+
 from src.api.chat_service import process_chat
+from src.index.bootstrap import ensure_search_index
 from src.index.vector_store import collection_count, get_collection
 from src.ingest.fetcher import load_scheme_urls
 from src.rag.generator import DISCLAIMER
@@ -54,29 +95,36 @@ ERROR_MESSAGE = (
     "Please try again."
 )
 
-INDEX_EMPTY_WARNING = (
-    "The vector index is empty or missing. NAV and other answers need a built "
-    "corpus. Run: `python scripts/build_corpus.py --skip-fetch` then restart this app."
+INDEX_BOOTSTRAP_ERROR = (
+    "Could not prepare the search index. Ensure `data/processed/chunks.jsonl` "
+    "is in the repo and set `GROQ_API_KEY` in Streamlit secrets."
 )
 
-INDEX_STALE_NAV_WARNING = (
-    "The vector index has no NAV chunks (likely built before the NAV fix). "
-    "Run: `python scripts/rebuild_index.py` then restart this app."
-)
+
+@st.cache_resource(show_spinner="Preparing search index (first load may take 1–2 minutes)…")
+def _prepare_search_index() -> int:
+    return ensure_search_index()
 
 
 def _index_warning() -> str | None:
     try:
         if collection_count() == 0:
-            return INDEX_EMPTY_WARNING
+            return (
+                "The vector index is still empty after bootstrap. "
+                "Check deploy logs or rebuild locally with "
+                "`python scripts/build_corpus.py --skip-fetch`."
+            )
         nav_ids = get_collection().get(
             where={"section_type": "nav"},
             include=[],
         )["ids"]
         if not nav_ids:
-            return INDEX_STALE_NAV_WARNING
+            return (
+                "The vector index has no NAV chunks. Rebuild locally and push "
+                "`data/processed/chunks.jsonl` to GitHub."
+            )
     except Exception:
-        return INDEX_EMPTY_WARNING
+        return INDEX_BOOTSTRAP_ERROR
     return None
 
 
@@ -162,6 +210,12 @@ def main() -> None:
     )
 
     _init_session()
+
+    try:
+        _prepare_search_index()
+    except Exception as exc:
+        st.error(f"{INDEX_BOOTSTRAP_ERROR}\n\n`{exc}`")
+        st.stop()
 
     st.title(PAGE_TITLE)
     st.markdown(

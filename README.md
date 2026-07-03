@@ -141,6 +141,29 @@ pytest tests/test_eval_queries.py -m "not integration"   # safety path
 pytest -m integration                                   # full stack
 ```
 
+## Streamlit Cloud (streamlit.io)
+
+The Chroma vector index is **not** stored in git. For cloud deploys the app ships
+`data/processed/chunks.jsonl` and **builds the index on first load** (~1–2 min).
+
+1. **Deploy** from GitHub with main file `ui/streamlit_app.py`.
+2. **Secrets** (App settings → Secrets), minimum:
+
+```toml
+GROQ_API_KEY = "your_groq_api_key"
+```
+
+See [.streamlit/secrets.toml.example](.streamlit/secrets.toml.example).
+
+3. **Reboot app** after pushing updates to `chunks.jsonl` or bootstrap code.
+
+Locally refresh chunks before pushing:
+
+```bash
+python scripts/build_corpus.py --skip-fetch
+git add data/processed/chunks.jsonl
+```
+
 ## Docker (optional)
 
 ```bash
