@@ -1,0 +1,19 @@
+{
+  "status": "success",
+  "started_at": "2026-07-03T04:19:40.360211+00:00",
+  "finished_at": "2026-07-03T04:19:52.231430+00:00",
+  "chunk_count": 67,
+  "indexed": 67,
+  "duration_sec": 11.871,
+  "chunks_path": "/Users/dp/Documents/PM_learning/MF_RAG/data/processed/chunks.jsonl",
+  "vector_db_path": "/Users/dp/Documents/PM_learning/MF_RAG/data/chroma",
+  "error": null,
+  "workflow_run_id": null,
+  "nav_snapshots": {
+    "HDFC Gold ETF Fund of Fund Direct Plan Growth": "NAV \u20b944.3622 (as on 02-Jul-2026)",
+    "HDFC Large Cap Fund Direct Growth": "NAV \u20b91228.496 (as on 02-Jul-2026)",
+    "HDFC Mid Cap Fund Direct Growth": "NAV \u20b9229.575 (as on 02-Jul-2026)",
+    "HDFC Silver ETF FOF Direct Growth": "NAV \u20b937.416 (as on 02-Jul-2026)",
+    "HDFC Small Cap Fund Direct Growth": "NAV \u20b9158.753 (as on 02-Jul-2026)"
+  }
+}

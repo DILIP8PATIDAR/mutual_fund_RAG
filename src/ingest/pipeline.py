@@ -6,13 +6,13 @@ import json
 import logging
 import os
 import time
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
 from src.config import settings
-from src.ingest.chunker import chunk_latest_raw_snapshots, write_chunks_jsonl
+from src.ingest.chunker import Chunk, chunk_latest_raw_snapshots, write_chunks_jsonl
 from src.ingest.fetcher import fetch_all
 from src.index.embedder import embed_passages
 from src.index.vector_store import collection_count, reset_collection, upsert_chunks
@@ -35,9 +35,21 @@ class IngestResult:
     vector_db_path: str
     error: str | None = None
     workflow_run_id: str | None = None
+    nav_snapshots: dict[str, str] = field(default_factory=dict)
 
     def to_manifest(self) -> dict[str, Any]:
         return asdict(self)
+
+
+def nav_summary_from_chunks(chunks: list[Chunk]) -> dict[str, str]:
+    """Map scheme name → latest NAV line from dedicated nav chunks."""
+    summary: dict[str, str] = {}
+    for chunk in chunks:
+        if chunk.section_type != "nav":
+            continue
+        line = chunk.text.split("\n", 1)[-1].strip()
+        summary[chunk.scheme] = line
+    return summary
 
 
 def manifest_path(processed_dir: Path | None = None) -> Path:
@@ -96,6 +108,7 @@ def get_ingest_health_info(
             "last_ingest_at": None,
             "ingest_stale": True,
             "ingest_status": None,
+            "nav_snapshots": {},
         }
 
     finished_at = manifest.get("finished_at") or manifest.get("started_at")
@@ -112,6 +125,7 @@ def get_ingest_health_info(
         "last_ingest_at": finished_at,
         "ingest_stale": ingest_stale,
         "ingest_status": status,
+        "nav_snapshots": manifest.get("nav_snapshots") or {},
     }
 
 
@@ -177,6 +191,9 @@ def run_ingestion(
         indexed = collection_count(collection)
         logger.info("Index ready: %s vectors in collection 'hdfc_mf_corpus'", indexed)
 
+        nav_snapshots = nav_summary_from_chunks(chunks)
+        logger.info("NAV snapshots: %s", nav_snapshots)
+
         finished_at = _utc_now_iso()
         result = IngestResult(
             status="success",
@@ -188,6 +205,7 @@ def run_ingestion(
             chunks_path=str(out_chunks),
             vector_db_path=str(out_vector),
             workflow_run_id=run_id,
+            nav_snapshots=nav_snapshots,
         )
         write_ingest_manifest(result, processed_dir=out_processed)
         return result

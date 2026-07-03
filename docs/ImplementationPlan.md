@@ -677,8 +677,8 @@ pytest -m integration
 | 6.3 | Daily workflow | `.github/workflows/ingest-daily.yml` — `on.schedule` cron + `workflow_dispatch` for manual runs |
 | 6.4 | Concurrency guard | Workflow `concurrency: group: ingest-daily, cancel-in-progress: false` so overlapping scheduled/manual runs do not execute in parallel |
 | 6.5 | CI job steps | Checkout → setup Python 3.11+ → cache pip + Hugging Face model → `pip install -r requirements.txt` → `python scripts/build_corpus.py` |
-| 6.6 | Run manifest | After each run, write `data/processed/last_ingest.json` — `{ "started_at", "finished_at", "status", "chunk_count", "duration_sec", "error", "workflow_run_id" }`; upload as workflow artifact |
-| 6.7 | Publish index | Upload `data/chroma/` and `data/processed/chunks.jsonl` as workflow artifacts (retention 30–90 days); optional deploy job syncs artifacts to production storage (S3, VPS volume, etc.) |
+| 6.6 | Run manifest | After each run, write `data/processed/last_ingest.json` — `{ "started_at", "finished_at", "status", "chunk_count", "duration_sec", "error", "workflow_run_id", "nav_snapshots" }`; commit to git and upload as workflow artifact |
+| 6.7 | Publish to git | On success, **commit and push** `data/processed/chunks.jsonl` and `data/processed/last_ingest.json` to `main` so Streamlit Cloud redeploys with fresh NAV; also upload workflow artifacts as backup (90-day retention) |
 | 6.8 | Failure handling | On exception: job fails (GitHub notification), set `status: "failed"` in manifest, retain previous production index (deploy step runs only on success) |
 | 6.9 | Health integration | `GET /api/health` — Include `last_ingest_at` and `ingest_stale` when manifest age exceeds 36 hours (optional Phase 6 stretch) |
 | 6.10 | README docs | Document schedule (UTC cron → IST), `workflow_dispatch` manual trigger, artifact download, and production deploy path |
@@ -692,16 +692,16 @@ flowchart LR
     Pipe["run_ingestion()"]
     Fetch["Fetcher"]
     Index["Chroma upsert"]
-    Manifest["last_ingest.json"]
-    Artifacts["Workflow artifacts"]
-    Deploy["Optional deploy\nto production volume"]
+    Manifest["last_ingest.json\n+ nav_snapshots"]
+    Artifacts["Workflow artifacts\n(backup)"]
+    GitPush["git push → main\n(Streamlit Cloud redeploy)"]
 
     GHA --> Job
     Job --> Pipe
     Pipe --> Fetch --> Index
     Pipe --> Manifest
+    Job --> GitPush
     Job --> Artifacts
-    Artifacts --> Deploy
 ```
 
 **Workflow triggers:**
@@ -729,9 +729,9 @@ on:
 
 **Ingestion scope per run:** Full pipeline — re-fetch all five Groww URLs, re-chunk, re-embed, upsert into `hdfc_mf_corpus` (idempotent `chunk_id`s from Phase 1).
 
-**Why GitHub Actions:** No always-on scheduler process; built-in cron, logs, failure alerts, and manual re-run from the repo UI. Runners are ephemeral, so the workflow must **publish** the rebuilt index (artifacts + optional deploy) for the API host to consume.
+**Why GitHub Actions:** No always-on scheduler process; built-in cron, logs, failure alerts, and manual re-run from the repo UI. Runners are ephemeral, so the workflow must **commit refreshed `chunks.jsonl` to git** (for Streamlit Cloud) and upload artifacts as backup.
 
-**Why daily:** Scheme facts change infrequently; daily refresh balances freshness with respectful crawling. Staging can use a weekly cron or `workflow_dispatch` only.
+**Why daily:** NAV and scheme facts update on Groww on business days; daily refresh keeps citations current. The previous design only uploaded artifacts — Streamlit Cloud never received updates because it reads from git, not workflow artifacts.
 
 ### Example workflow skeleton
 
@@ -747,6 +747,9 @@ concurrency:
   group: ingest-daily
   cancel-in-progress: false
 
+permissions:
+  contents: write
+
 jobs:
   ingest:
     runs-on: ubuntu-latest
@@ -759,8 +762,15 @@ jobs:
         with:
           path: ~/.cache/huggingface
           key: hf-${{ runner.os }}-${{ hashFiles('requirements.txt') }}
-      - run: pip install -r requirements.txt
-      - run: python scripts/build_corpus.py
+      - run: pip install -r requirements-dev.txt
+      - run: python scripts/build_corpus.py --no-playwright
+      - name: Commit updated corpus to repository
+        if: success()
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/processed/chunks.jsonl data/processed/last_ingest.json
+          git diff --staged --quiet || (git commit -m "chore(ingest): refresh corpus" && git push)
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -790,6 +800,7 @@ MF_RAG/
 - [ ] `.github/workflows/ingest-daily.yml` exists with daily `schedule` and `workflow_dispatch`
 - [ ] Workflow runs `python scripts/build_corpus.py` (via shared `run_ingestion()` code path)
 - [ ] Concurrency group prevents overlapping ingest jobs
+- [ ] Successful run **commits and pushes** `chunks.jsonl` and `last_ingest.json` to `main`
 - [ ] Successful run uploads `data/chroma/` and `data/processed/` as artifacts
 - [ ] Failed job fails the workflow, does not deploy a partial index, and records `status: "failed"` in manifest when the pipeline writes it
 - [ ] Manual trigger from **Actions → Daily corpus ingest → Run workflow** works
@@ -807,7 +818,7 @@ MF_RAG/
 
 - Phase 1 complete (`build_corpus.py`, ingestion and index modules)
 - GitHub repository with Actions enabled
-- Production deploy path defined (artifact pull, S3 sync, or volume mount) so the API reads the updated Chroma index
+- Production deploy path: git push triggers Streamlit Cloud redeploy; `chunks.jsonl` fingerprint invalidates cached index bootstrap
 
 ---
 

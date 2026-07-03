@@ -109,20 +109,29 @@ After a local refresh, restart Streamlit/API to pick up the new index.
 
 ### Daily ingest (GitHub Actions)
 
-The **Daily corpus ingest** workflow (`.github/workflows/ingest-daily.yml`) rebuilds the corpus on a schedule:
+The **Daily corpus ingest** workflow (`.github/workflows/ingest-daily.yml`) rebuilds the corpus on a schedule and **commits updated `chunks.jsonl` to `main`**, which triggers Streamlit Cloud to redeploy with fresh NAV and scheme facts.
 
 | Trigger | When |
 |---------|------|
 | `schedule` | Daily at **10:30 IST** (`0 5 * * *` UTC) |
 | `workflow_dispatch` | Manual run from **Actions → Daily corpus ingest → Run workflow** |
 
-The job runs `python scripts/build_corpus.py`, then uploads `data/chroma/` and `data/processed/` as artifacts (90-day retention). A concurrency group (`ingest-daily`) prevents overlapping runs.
+After each successful run the workflow:
 
-**Production:** Download the latest workflow artifact (or add a deploy step) and sync `data/chroma/` to the API host’s `VECTOR_DB_PATH`. Failed workflow runs do not replace the production index until a successful deploy.
+1. Re-fetches all five Groww pages (`build_corpus.py --no-playwright`)
+2. Writes `data/processed/chunks.jsonl` and `data/processed/last_ingest.json` (includes per-scheme NAV snapshots)
+3. Commits and pushes both files to the repository
+4. Uploads `data/chroma/` and `data/processed/` as backup artifacts (90-day retention)
+
+Streamlit Cloud picks up the git push automatically and rebuilds the vector index from the new `chunks.jsonl`.
+
+**Manual refresh** (if you cannot wait for the schedule):
 
 ```bash
-# Example: apply a downloaded artifact to local data/
-unzip corpus-<run_id>.zip -d data/
+python scripts/build_corpus.py
+git add data/processed/chunks.jsonl data/processed/last_ingest.json
+git commit -m "Refresh corpus chunks"
+git push
 ```
 
 ## Evaluation

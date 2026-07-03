@@ -9,9 +9,11 @@ from src.ingest.pipeline import (
     IngestResult,
     get_ingest_health_info,
     manifest_path,
+    nav_summary_from_chunks,
     read_ingest_manifest,
     write_ingest_manifest,
 )
+from src.ingest.chunker import Chunk
 
 
 def test_manifest_path_under_processed_dir(tmp_path: Path):
@@ -39,6 +41,47 @@ def test_write_and_read_manifest(tmp_path: Path):
     assert loaded["chunk_count"] == 62
     assert loaded["workflow_run_id"] == "12345"
     assert loaded["finished_at"] >= loaded["started_at"]
+
+
+def test_get_ingest_health_info_includes_nav_snapshots(tmp_path: Path):
+    finished = datetime.now(timezone.utc).isoformat()
+    write_ingest_manifest(
+        IngestResult(
+            status="success",
+            started_at=finished,
+            finished_at=finished,
+            chunk_count=1,
+            indexed=1,
+            duration_sec=1.0,
+            chunks_path=str(tmp_path / "chunks.jsonl"),
+            vector_db_path=str(tmp_path / "chroma"),
+            nav_snapshots={
+                "HDFC Large Cap Fund Direct Growth": "NAV ₹1228.50 (as on 02-Jul-2026)"
+            },
+        ),
+        processed_dir=tmp_path,
+    )
+    info = get_ingest_health_info(processed_dir=tmp_path)
+    assert "HDFC Large Cap Fund Direct Growth" in info["nav_snapshots"]
+
+
+def test_nav_summary_from_chunks():
+    chunks = [
+        Chunk(
+            chunk_id="abc",
+            scheme="HDFC Large Cap Fund Direct Growth",
+            category="large-cap equity",
+            source_url="https://example.com",
+            doc_type="scheme_page",
+            section_title="NAV",
+            section_type="nav",
+            chunk_index=0,
+            fetched_at="2026-07-03T00:00:00+00:00",
+            text="HDFC Large Cap Fund Direct Growth — NAV:\nNAV ₹1228.50 (as on 02-Jul-2026)",
+        )
+    ]
+    summary = nav_summary_from_chunks(chunks)
+    assert summary["HDFC Large Cap Fund Direct Growth"] == "NAV ₹1228.50 (as on 02-Jul-2026)"
 
 
 def test_get_ingest_health_info_missing_manifest(tmp_path: Path, monkeypatch):

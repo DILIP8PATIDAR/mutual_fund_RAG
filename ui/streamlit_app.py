@@ -145,6 +145,11 @@ def _render_deploy_status(indexed_chunks: int) -> None:
             st.caption(f"Last corpus build: {ingest_info['last_ingest_at']}")
             if ingest_info["ingest_stale"]:
                 st.caption("Corpus may be stale (>36h since last ingest).")
+        nav_snapshots = ingest_info.get("nav_snapshots") or {}
+        if nav_snapshots:
+            with st.expander("Latest NAV in corpus", expanded=False):
+                for scheme, nav_line in sorted(nav_snapshots.items()):
+                    st.caption(f"**{scheme}** — {nav_line}")
         if not groq_ready:
             st.warning(
                 "Set `GROQ_API_KEY` in Streamlit secrets to enable factual answers."

@@ -235,36 +235,36 @@ The vector index on Streamlit Cloud is **ephemeral**. What persists in git is `c
 
 ```mermaid
 flowchart LR
-    A["GitHub Actions\ningest-daily.yml"] --> B["build_corpus.py"]
-    B --> C["Artifact:\nchunks.jsonl + chroma/"]
-    D["Developer"] --> E["Download artifact\nor run locally"]
-    E --> F["Commit chunks.jsonl"]
-    F --> G["git push"]
-    G --> H["Streamlit auto-redeploy"]
-    H --> I["Reboot app →\nre-bootstrap index"]
+    A["GitHub Actions\ningest-daily.yml"] --> B["build_corpus.py\n--no-playwright"]
+    B --> C["chunks.jsonl +\nlast_ingest.json"]
+    C --> D["git commit + push"]
+    D --> E["Streamlit Cloud\nauto-redeploy"]
+    E --> F["Re-bootstrap index\n(fingerprint changed)"]
+    B --> G["Workflow artifact\n(backup)"]
 ```
 
-### Option A — GitHub Actions (scheduled)
+### Automated daily refresh (recommended)
 
 Workflow: `.github/workflows/ingest-daily.yml`
 
-- Runs daily at **10:30 IST** (05:00 UTC) or via **workflow_dispatch**.
-- Uploads `data/chroma/` and `data/processed/` as artifacts (90-day retention).
+- Runs daily at **10:30 IST** (05:00 UTC) or via **workflow_dispatch**
+- Re-fetches all five Groww pages and rebuilds the corpus
+- **Commits and pushes** `data/processed/chunks.jsonl` and `data/processed/last_ingest.json` to `main`
+- Streamlit Cloud redeploys on push; the app rebuilds Chroma from the new JSONL (fingerprint cache invalidation)
+- Also uploads artifacts as backup (90-day retention)
 
-**To update the live app:**
+`last_ingest.json` includes `nav_snapshots` — per-scheme NAV lines for the sidebar health panel.
 
-1. Download the latest successful workflow artifact.
-2. Copy `data/processed/chunks.jsonl` into the repo.
-3. Commit, push, and **Reboot app** in Streamlit Cloud (or wait for auto-deploy).
+> **Previous gap:** The workflow only uploaded artifacts. Streamlit Cloud reads from git, so NAV stayed stale until this auto-commit step was added.
 
-### Option B — Local rebuild
+### Manual refresh
 
 ```bash
 python scripts/build_corpus.py          # re-fetch Groww pages
 # or
 python scripts/build_corpus.py --skip-fetch
 
-git add data/processed/chunks.jsonl
+git add data/processed/chunks.jsonl data/processed/last_ingest.json
 git commit -m "Refresh corpus chunks"
 git push
 ```
