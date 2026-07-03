@@ -25,6 +25,13 @@ def test_relative_paths_resolve_from_project_root(monkeypatch, tmp_path):
     assert settings.processed_data_dir == (PROJECT_ROOT / "data" / "processed").resolve()
 
 
+def test_cloud_deploy_parses_truthy_strings(monkeypatch):
+    monkeypatch.setenv("CLOUD_DEPLOY", "true")
+    get_settings.cache_clear()
+    settings = get_settings()
+    assert settings.cloud_deploy is True
+
+
 def test_urls_json_has_five_groww_schemes():
     urls_path = PROJECT_ROOT / "data" / "urls.json"
     schemes = json.loads(urls_path.read_text(encoding="utf-8"))

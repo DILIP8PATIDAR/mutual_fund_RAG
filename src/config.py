@@ -39,9 +39,23 @@ class Settings(BaseSettings):
     groq_max_retries: int = Field(default=3, ge=0)
     groq_timeout_sec: float = Field(default=30.0, gt=0.0)
 
+    cloud_deploy: bool = Field(
+        default=False,
+        description="Streamlit Cloud / production: skip live Groww fetch fallback",
+    )
+
     urls_file: Path = Field(default=PROJECT_ROOT / "data" / "urls.json")
     raw_data_dir: Path = Field(default=PROJECT_ROOT / "data" / "raw")
     processed_data_dir: Path = Field(default=PROJECT_ROOT / "data" / "processed")
+
+    @field_validator("cloud_deploy", mode="before")
+    @classmethod
+    def parse_cloud_deploy(cls, value: Any) -> bool:
+        if isinstance(value, bool):
+            return value
+        if value is None:
+            return False
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
     @field_validator(
         "vector_db_path",

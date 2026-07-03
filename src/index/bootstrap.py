@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from pathlib import Path
 
@@ -16,6 +17,25 @@ from src.index.vector_store import (
 )
 
 logger = logging.getLogger(__name__)
+
+CHUNKS_JSONL = "chunks.jsonl"
+
+
+def chunks_jsonl_path() -> Path:
+    return settings.processed_data_dir / CHUNKS_JSONL
+
+
+def chunks_jsonl_fingerprint() -> str:
+    """Stable fingerprint for cache invalidation when corpus changes."""
+    path = chunks_jsonl_path()
+    if not path.is_file():
+        return "missing"
+
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for block in iter(lambda: handle.read(65536), b""):
+            digest.update(block)
+    return digest.hexdigest()
 
 
 def _has_nav_chunks() -> bool:
@@ -35,7 +55,7 @@ def rebuild_index_from_chunks(
     vector_db_path: Path | None = None,
 ) -> int:
     """Embed chunk rows from JSONL and replace the vector index."""
-    path = chunks_path or (settings.processed_data_dir / "chunks.jsonl")
+    path = chunks_path or chunks_jsonl_path()
     if not path.is_file():
         raise FileNotFoundError(
             f"Missing {path}. Run scripts/build_corpus.py first."
@@ -61,20 +81,40 @@ def rebuild_index_from_chunks(
     return indexed
 
 
-def ensure_search_index() -> int:
+def ensure_search_index(*, expected_fingerprint: str | None = None) -> int:
     """Return chunk count, building the index from JSONL when absent."""
+    current_fingerprint = chunks_jsonl_fingerprint()
+
     try:
         count = collection_count()
-        if count > 0 and _has_nav_chunks():
+        index_ok = count > 0 and _has_nav_chunks()
+        fingerprint_ok = (
+            expected_fingerprint is None
+            or expected_fingerprint == "missing"
+            or current_fingerprint == expected_fingerprint
+        )
+        if index_ok and fingerprint_ok:
             return count
+        if index_ok and not fingerprint_ok:
+            logger.info(
+                "Corpus fingerprint changed (%s -> %s); rebuilding index.",
+                (expected_fingerprint or "")[:12],
+                current_fingerprint[:12],
+            )
     except Exception:
         logger.exception("Could not read existing vector index")
 
-    chunks_path = settings.processed_data_dir / "chunks.jsonl"
+    chunks_path = chunks_jsonl_path()
     if chunks_path.is_file():
         return rebuild_index_from_chunks(chunks_path)
 
-    # Last resort: fetch Groww pages over the network (no Playwright on cloud hosts).
+    if settings.cloud_deploy:
+        raise FileNotFoundError(
+            f"Missing {chunks_path}. Commit data/processed/chunks.jsonl to the "
+            "repository before deploying to Streamlit Cloud."
+        )
+
+    # Last resort for local dev: fetch Groww pages (no Playwright on cloud hosts).
     from src.ingest.pipeline import run_ingestion
 
     logger.warning(

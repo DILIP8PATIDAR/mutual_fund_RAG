@@ -31,6 +31,7 @@ _SECRET_KEYS = (
     "LLM_CONTEXT_CHAR_BUDGET",
     "GROQ_MAX_RETRIES",
     "GROQ_TIMEOUT_SEC",
+    "CLOUD_DEPLOY",
 )
 
 
@@ -38,18 +39,17 @@ def _load_deploy_secrets() -> None:
     """Map Streamlit Cloud secrets into os.environ for pydantic-settings."""
     try:
         secrets = st.secrets
+        for key in _SECRET_KEYS:
+            if key in secrets:
+                os.environ.setdefault(key, str(secrets[key]))
+
+        env_section = secrets.get("env", {})
+        if isinstance(env_section, dict):
+            for key in _SECRET_KEYS:
+                if key in env_section:
+                    os.environ.setdefault(key, str(env_section[key]))
     except Exception:
         return
-
-    for key in _SECRET_KEYS:
-        if key in secrets:
-            os.environ.setdefault(key, str(secrets[key]))
-
-    env_section = secrets.get("env", {})
-    if isinstance(env_section, dict):
-        for key in _SECRET_KEYS:
-            if key in env_section:
-                os.environ.setdefault(key, str(env_section[key]))
 
     from src.config import get_settings
 
@@ -59,9 +59,11 @@ def _load_deploy_secrets() -> None:
 _load_deploy_secrets()
 
 from src.api.chat_service import process_chat
-from src.index.bootstrap import ensure_search_index
+from src.config import settings
+from src.index.bootstrap import chunks_jsonl_fingerprint, ensure_search_index
 from src.index.vector_store import collection_count, get_collection
 from src.ingest.fetcher import load_scheme_urls
+from src.ingest.pipeline import get_ingest_health_info
 from src.rag.generator import DISCLAIMER
 
 PAGE_TITLE = "Mutual Fund FAQ Assistant"
@@ -102,8 +104,8 @@ INDEX_BOOTSTRAP_ERROR = (
 
 
 @st.cache_resource(show_spinner="Preparing search index (first load may take 1–2 minutes)…")
-def _prepare_search_index() -> int:
-    return ensure_search_index()
+def _prepare_search_index(corpus_fingerprint: str) -> int:
+    return ensure_search_index(expected_fingerprint=corpus_fingerprint)
 
 
 def _index_warning() -> str | None:
@@ -126,6 +128,27 @@ def _index_warning() -> str | None:
     except Exception:
         return INDEX_BOOTSTRAP_ERROR
     return None
+
+
+def _render_deploy_status(indexed_chunks: int) -> None:
+    ingest_info = get_ingest_health_info()
+    groq_ready = bool(settings.groq_api_key.strip())
+    corpus_fp = chunks_jsonl_fingerprint()
+
+    with st.sidebar:
+        st.subheader("Deploy status")
+        st.caption("Index and configuration health for this session.")
+        st.metric("Indexed chunks", indexed_chunks)
+        st.write("Groq API key", "Configured" if groq_ready else "Missing")
+        st.caption(f"Corpus fingerprint: `{corpus_fp[:12]}…`")
+        if ingest_info["last_ingest_at"]:
+            st.caption(f"Last corpus build: {ingest_info['last_ingest_at']}")
+            if ingest_info["ingest_stale"]:
+                st.caption("Corpus may be stale (>36h since last ingest).")
+        if not groq_ready:
+            st.warning(
+                "Set `GROQ_API_KEY` in Streamlit secrets to enable factual answers."
+            )
 
 
 def _source_label(url: str) -> str:
@@ -211,11 +234,14 @@ def main() -> None:
 
     _init_session()
 
+    corpus_fingerprint = chunks_jsonl_fingerprint()
     try:
-        _prepare_search_index()
+        indexed_chunks = _prepare_search_index(corpus_fingerprint)
     except Exception as exc:
         st.error(f"{INDEX_BOOTSTRAP_ERROR}\n\n`{exc}`")
         st.stop()
+
+    _render_deploy_status(indexed_chunks)
 
     st.title(PAGE_TITLE)
     st.markdown(

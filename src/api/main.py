@@ -8,12 +8,14 @@ validate). The Streamlit UI in ``ui/streamlit_app.py`` calls the same
 from __future__ import annotations
 
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from src.api.chat_service import ChatRequest, ChatResponse, process_chat
+from src.index.bootstrap import ensure_search_index
 from src.index.vector_store import collection_count
 from src.ingest.fetcher import load_scheme_urls
 from src.ingest.pipeline import get_ingest_health_info
@@ -37,11 +39,22 @@ class SchemeItem(BaseModel):
     url: str
 
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    try:
+        indexed = ensure_search_index()
+        logger.info("API startup: search index ready (%s vectors)", indexed)
+    except Exception:
+        logger.exception("API startup: index bootstrap failed")
+    yield
+
+
 def create_app() -> FastAPI:
     app = FastAPI(
         title="Mutual Fund FAQ Assistant",
         description="Facts-only RAG over five HDFC Groww scheme pages.",
         version="0.4.0",
+        lifespan=lifespan,
     )
 
     app.add_middleware(

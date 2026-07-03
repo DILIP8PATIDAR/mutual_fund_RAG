@@ -42,7 +42,7 @@ See [docs/Architecture.md](docs/Architecture.md) and [docs/ImplementationPlan.md
 ```bash
 python -m venv .venv
 source .venv/bin/activate          # Windows: .venv\Scripts\activate
-pip install -r requirements.txt
+pip install -r requirements-dev.txt
 cp .env.example .env               # add your GROQ_API_KEY
 ```
 
@@ -143,10 +143,12 @@ pytest -m integration                                   # full stack
 
 ## Streamlit Cloud (streamlit.io)
 
+Full step-by-step guide: [docs/deployment-plan.md](docs/deployment-plan.md).
+
 The Chroma vector index is **not** stored in git. For cloud deploys the app ships
 `data/processed/chunks.jsonl` and **builds the index on first load** (~1–2 min).
 
-1. **Deploy** from GitHub with main file `ui/streamlit_app.py`.
+1. **Deploy** from GitHub with main file `ui/streamlit_app.py` (Python 3.11+).
 2. **Secrets** (App settings → Secrets), minimum:
 
 ```toml
@@ -196,7 +198,7 @@ MF_RAG/
 ├── .github/workflows/
 │   └── ingest-daily.yml     # scheduled corpus rebuild
 ├── data/urls.json           # five Groww URLs
-├── docs/                    # architecture, implementation plan, QA
+├── docs/                    # architecture, implementation plan, QA, deployment
 ├── scripts/
 │   ├── build_corpus.py
 │   ├── rebuild_index.py

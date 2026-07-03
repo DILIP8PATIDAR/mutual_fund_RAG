@@ -4,7 +4,7 @@ from ui import streamlit_app
 
 
 def test_example_questions_defined():
-    assert len(streamlit_app.EXAMPLE_QUESTIONS) == 3
+    assert len(streamlit_app.EXAMPLE_QUESTIONS) == 4
     labels = [label for label, _ in streamlit_app.EXAMPLE_QUESTIONS]
     assert "Min SIP Large Cap" in labels
     assert "Exit load Small Cap" in labels
