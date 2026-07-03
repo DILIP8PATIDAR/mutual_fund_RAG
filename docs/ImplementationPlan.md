@@ -30,8 +30,8 @@ gantt
 | **2** | RAG API | `/api/chat` returns cited factual answers |
 | **3** | Safety layer | Classifier, refusals, validator, PII guard |
 | **4** | UI | Minimal chat interface with disclaimer |
-| **5** | Polish & docs | Tuned retrieval, tests, README, deployment notes |
-| **6** | Scheduler | GitHub Actions daily workflow triggers ingestion and publishes updated index |
+| **5** | Polish & docs | Tuned retrieval, tests, README, Streamlit Cloud deployment |
+| **6** | Scheduler | GitHub Actions daily ingest → auto-commit corpus to git → Streamlit redeploy |
 
 ---
 
@@ -520,12 +520,14 @@ The FastAPI app (`src/api/main.py`) remains the programmatic API for health chec
 | 4.1 | Choose UI approach | **Streamlit** (`ui/streamlit_app.py`) — minimal Python UI, no separate frontend build |
 | 4.2 | Shared chat service | `src/api/chat_service.py` — `process_chat()` used by both Streamlit and FastAPI |
 | 4.3 | Welcome screen | `st.expander` with facts-only scope; list five schemes from `load_scheme_urls()` |
-| 4.4 | Example questions | Three `st.button` prompts (min SIP, exit load, benchmark) that submit immediately |
+| 4.4 | Example questions | Four `st.button` prompts (min SIP, NAV, exit load, benchmark) that submit immediately |
 | 4.5 | Disclaimer | Persistent green banner via custom CSS: **Facts-only. No investment advice.** |
 | 4.6 | Chat panel | `st.chat_message` + `st.chat_input`; session history in `st.session_state.messages` |
 | 4.7 | Render responses | Answer text, `st.link_button` for single `source_url`, `st.caption` for `last_updated` |
 | 4.8 | Refusal styling | Amber `.refused-msg` container when `refused=True`; AMFI / Groww link via `st.link_button` |
 | 4.9 | Loading & errors | `st.spinner("Thinking…")` during `process_chat()`; `st.error` on exceptions |
+| 4.10 | Cloud bootstrap | `@st.cache_resource` calls `ensure_search_index()` on first load; maps Streamlit Secrets → env |
+| 4.11 | Deploy status sidebar | Chunk count, Groq key status, corpus fingerprint, `nav_snapshots` from `last_ingest.json` |
 
 ### UI requirements (checklist)
 
@@ -533,7 +535,7 @@ The FastAPI app (`src/api/main.py`) remains the programmatic API for health chec
 |-------------|----------------|
 | Welcome message explaining facts-only scope | `WELCOME_TEXT` in expander on first load |
 | List five supported HDFC schemes | Loaded from `urls.json` via `load_scheme_urls()` |
-| Three clickable example questions | `EXAMPLE_QUESTIONS` → `st.button` per example |
+| Three clickable example questions | `EXAMPLE_QUESTIONS` → four `st.button` examples |
 | Persistent disclaimer banner | Custom CSS banner with `DISCLAIMER` constant |
 | Chat input + send | `st.chat_input` (Enter to send) |
 | Session-only message history | `st.session_state.messages` (cleared on browser refresh) |
@@ -556,8 +558,8 @@ The FastAPI app (`src/api/main.py`) remains the programmatic API for health chec
 │    Supported schemes (5)                    │
 ├─────────────────────────────────────────────┤
 │  Try an example                             │
-│  [Min SIP Large Cap] [Exit load Small]      │
-│  [Benchmark Mid Cap]                        │
+│  [Min SIP Large Cap] [NAV Silver ETF]       │
+│  [Exit load Small Cap] [Benchmark Mid Cap]  │
 ├─────────────────────────────────────────────┤
 │  💬 user: What is the minimum SIP…          │
 │  🤖 assistant: The minimum SIP is ₹100.     │
@@ -570,13 +572,14 @@ The FastAPI app (`src/api/main.py`) remains the programmatic API for health chec
 
 ### Acceptance criteria
 
-- [ ] `streamlit run ui/streamlit_app.py` opens the UI at `http://localhost:8501`
-- [ ] Disclaimer visible on every screen (top banner)
-- [ ] Three example questions clickable and sendable
-- [ ] Factual answer shows answer + one source link + last updated
-- [ ] Advisory question shows refusal without fabricated advice
-- [ ] No login, no PII fields, no persistent user storage
-- [ ] `POST /api/chat` still works via FastAPI for API-only / integration tests
+- [x] `streamlit run ui/streamlit_app.py` opens the UI at `http://localhost:8501`
+- [x] Disclaimer visible on every screen (top banner)
+- [x] Four example questions clickable and sendable
+- [x] Factual answer shows answer + one source link + last updated
+- [x] Advisory question shows refusal without fabricated advice
+- [x] No login, no PII fields, no persistent user storage
+- [x] `POST /api/chat` still works via FastAPI for API-only / integration tests
+- [x] Streamlit Cloud bootstrap builds index from `chunks.jsonl` on first load
 
 ### Tests (recommended)
 
@@ -611,6 +614,11 @@ The FastAPI app (`src/api/main.py`) remains the programmatic API for health chec
 | 5.7 | Disclaimer snippet | README, Streamlit banner, API root JSON — **Facts-only. No investment advice.** |
 | 5.8 | Optional Docker | `Dockerfile` + `docker-compose.yml` (API on 8000, Streamlit on 8501, `data/` volume) |
 | 5.9 | Manual QA checklist | `docs/QA_CHECKLIST.md` — problem-statement success criteria |
+| 5.10 | Deployment plan | `docs/deployment-plan.md` — Streamlit Community Cloud step-by-step guide |
+| 5.11 | Production deps split | `requirements.txt` (Streamlit Cloud / Docker) + `requirements-dev.txt` (pytest, playwright) |
+| 5.12 | Cloud deploy artifacts | `packages.txt`, `.streamlit/config.toml`, `.streamlit/secrets.toml.example`, `.python-version` |
+| 5.13 | Index bootstrap | `src/index/bootstrap.py` — build Chroma from `chunks.jsonl` on cold start; corpus fingerprint cache invalidation |
+| 5.14 | FastAPI startup hook | `src/api/main.py` lifespan — `ensure_search_index()` on API boot for non-Streamlit hosts |
 
 ### Evaluation fixture (`tests/fixtures/sample_queries.json`)
 
@@ -645,6 +653,8 @@ pytest -m integration
 - [x] Evaluation fixture + automated tests for all eight sample queries
 - [x] problemStatement success criteria captured in `docs/QA_CHECKLIST.md`
 - [x] No secrets committed; `.env.example` is complete
+- [x] `docs/deployment-plan.md` documents Streamlit Cloud deploy end-to-end
+- [x] Production vs dev dependencies split for faster cloud builds
 
 ### Success criteria checklist (from problem statement)
 
@@ -676,12 +686,12 @@ pytest -m integration
 | 6.2 | Refactor build script | `scripts/build_corpus.py` — Call `run_ingestion()` from pipeline module; keep CLI flags (`--skip-fetch`, `--no-playwright`) |
 | 6.3 | Daily workflow | `.github/workflows/ingest-daily.yml` — `on.schedule` cron + `workflow_dispatch` for manual runs |
 | 6.4 | Concurrency guard | Workflow `concurrency: group: ingest-daily, cancel-in-progress: false` so overlapping scheduled/manual runs do not execute in parallel |
-| 6.5 | CI job steps | Checkout → setup Python 3.11+ → cache pip + Hugging Face model → `pip install -r requirements.txt` → `python scripts/build_corpus.py` |
+| 6.5 | CI job steps | Checkout → setup Python 3.11 → cache pip + Hugging Face → `pip install -r requirements-dev.txt` → `python scripts/build_corpus.py --no-playwright` |
 | 6.6 | Run manifest | After each run, write `data/processed/last_ingest.json` — `{ "started_at", "finished_at", "status", "chunk_count", "duration_sec", "error", "workflow_run_id", "nav_snapshots" }`; commit to git and upload as workflow artifact |
 | 6.7 | Publish to git | On success, **commit and push** `data/processed/chunks.jsonl` and `data/processed/last_ingest.json` to `main` so Streamlit Cloud redeploys with fresh NAV; also upload workflow artifacts as backup (90-day retention) |
 | 6.8 | Failure handling | On exception: job fails (GitHub notification), set `status: "failed"` in manifest, retain previous production index (deploy step runs only on success) |
-| 6.9 | Health integration | `GET /api/health` — Include `last_ingest_at` and `ingest_stale` when manifest age exceeds 36 hours (optional Phase 6 stretch) |
-| 6.10 | README docs | Document schedule (UTC cron → IST), `workflow_dispatch` manual trigger, artifact download, and production deploy path |
+| 6.9 | Health integration | `GET /api/health` and Streamlit sidebar expose `last_ingest_at`, `ingest_stale`, and `nav_snapshots` from manifest |
+| 6.10 | README + deploy docs | README corpus refresh section; `docs/deployment-plan.md` §6 documents git auto-commit → Streamlit redeploy |
 
 ### Scheduler design
 
@@ -724,8 +734,9 @@ on:
 |---------|-------|---------|
 | Cron | `0 5 * * *` (UTC) | Once per day at 10:30 IST |
 | Concurrency group | `ingest-daily` | Prevent parallel corpus builds |
-| Artifact paths | `data/chroma/`, `data/processed/` | Persist index from ephemeral runner |
+| Git-tracked corpus | `data/processed/chunks.jsonl`, `data/processed/last_ingest.json` | Streamlit Cloud reads from git, not workflow artifacts |
 | Model cache | `actions/cache` on `~/.cache/huggingface` | Avoid re-downloading BGE each run |
+| Workflow permissions | `contents: write` | Required for auto-commit step |
 
 **Ingestion scope per run:** Full pipeline — re-fetch all five Groww URLs, re-chunk, re-embed, upsert into `hdfc_mf_corpus` (idempotent `chunk_id`s from Phase 1).
 
@@ -785,33 +796,42 @@ jobs:
 
 ```
 MF_RAG/
-├── .github/
-│   └── workflows/
-│       └── ingest-daily.yml     # Scheduled + manual ingestion
+├── .github/workflows/
+│   └── ingest-daily.yml              # Scheduled + manual ingestion + git push
+├── .streamlit/
+│   ├── config.toml                   # Cloud server config
+│   └── secrets.toml.example          # GROQ_API_KEY, CLOUD_DEPLOY, etc.
+├── packages.txt                      # build-essential for cloud builds
+├── requirements-dev.txt              # CI ingest (includes playwright)
+├── docs/
+│   └── deployment-plan.md            # Streamlit Cloud deploy guide
 ├── src/
-│   └── ingest/
-│       └── pipeline.py          # run_ingestion() entrypoint
+│   ├── index/bootstrap.py            # Cold-start index from chunks.jsonl
+│   └── ingest/pipeline.py            # run_ingestion() + nav_snapshots
 └── data/processed/
-    └── last_ingest.json         # Written each run; included in artifacts
+    ├── chunks.jsonl                  # Tracked in git; source of truth for cloud
+    └── last_ingest.json              # Tracked in git; nav_snapshots + timestamps
 ```
 
 ### Acceptance criteria
 
-- [ ] `.github/workflows/ingest-daily.yml` exists with daily `schedule` and `workflow_dispatch`
-- [ ] Workflow runs `python scripts/build_corpus.py` (via shared `run_ingestion()` code path)
-- [ ] Concurrency group prevents overlapping ingest jobs
-- [ ] Successful run **commits and pushes** `chunks.jsonl` and `last_ingest.json` to `main`
-- [ ] Successful run uploads `data/chroma/` and `data/processed/` as artifacts
-- [ ] Failed job fails the workflow, does not deploy a partial index, and records `status: "failed"` in manifest when the pipeline writes it
-- [ ] Manual trigger from **Actions → Daily corpus ingest → Run workflow** works
-- [ ] README documents UTC cron → IST equivalent and how production loads the latest index
+- [x] `.github/workflows/ingest-daily.yml` exists with daily `schedule` and `workflow_dispatch`
+- [x] Workflow runs `python scripts/build_corpus.py --no-playwright` (via shared `run_ingestion()` code path)
+- [x] Concurrency group prevents overlapping ingest jobs
+- [x] Successful run **commits and pushes** `chunks.jsonl` and `last_ingest.json` to `main`
+- [x] Successful run uploads `data/chroma/` and `data/processed/` as backup artifacts
+- [x] Failed job fails the workflow, does not commit stale corpus, and records `status: "failed"` in manifest
+- [x] Manual trigger from **Actions → Daily corpus ingest → Run workflow** works
+- [x] README and `docs/deployment-plan.md` document auto-commit → Streamlit redeploy path
+- [x] `nav_snapshots` in manifest matches latest Groww NAV per scheme after each successful run
 
 ### Tests (recommended)
 
 | Test | Assert |
 |------|--------|
 | `test_pipeline.py` | `run_ingestion(skip_fetch=True)` produces chunks and upserts without network |
-| `test_ingest_manifest.py` | Manifest written on success; `finished_at` ≥ `started_at` |
+| `test_ingest_manifest.py` | Manifest written on success; `nav_snapshots` populated; health info includes stale flag |
+| `test_bootstrap.py` | Index bootstrap, corpus fingerprint, cloud_deploy fail-fast |
 | CI smoke (optional) | Separate `workflow_dispatch` test workflow or job with `--skip-fetch` on a fixture commit |
 
 ### Dependencies
@@ -832,6 +852,22 @@ MF_RAG/
 | `VECTOR_DB_PATH` | Phase 1, 2 |
 | `GROQ_API_KEY`, `LLM_MODEL` | Phase 2, 3 |
 | `TOP_K`, `SIMILARITY_THRESHOLD` | Phase 2, 5 |
+| `CLOUD_DEPLOY` | Phase 5 (Streamlit Cloud bootstrap) |
+
+### Production data flow (Phase 5 + 6)
+
+```mermaid
+flowchart LR
+    Groww["Groww scheme pages"] --> Ingest["GitHub Actions\ningest-daily.yml"]
+    Ingest --> JSONL["chunks.jsonl\n+ last_ingest.json"]
+    JSONL --> Git["git push main"]
+    Git --> SC["Streamlit Cloud"]
+    SC --> Bootstrap["ensure_search_index()\ncorpus fingerprint"]
+    Bootstrap --> Chroma["Ephemeral Chroma index"]
+    Chroma --> Chat["process_chat()"]
+```
+
+**Key lesson (2026-07-03):** Uploading workflow artifacts alone does **not** update Streamlit Cloud. The app reads `chunks.jsonl` from git and rebuilds Chroma on deploy. The scheduler must commit refreshed corpus files to `main` after each successful ingest.
 
 ### Logging policy (Phase 3 onward)
 
@@ -875,12 +911,12 @@ Phases 0→1→2→3→4→5 are sequential for the core product. **Phase 6** de
 | 1 | `fetcher`, `parser`, `chunker`, `embedder`, `vector_store`, `build_corpus.py`, Chroma index |
 | 2 | `retriever`, `generator`, FastAPI routes (`/api/chat`, `/api/health`, `/api/schemes`) |
 | 3 | `guard`, `classifier`, `refusal`, `validator`, integrated safe pipeline |
-| 4 | Chat UI with welcome, examples, disclaimer (`ui/streamlit_app.py`) |
-| 5 | Tuned params, eval fixture, tests, README, Docker, QA checklist |
-| 6 | `pipeline.py`, `.github/workflows/ingest-daily.yml`, artifact publish, `last_ingest.json` |
+| 4 | Chat UI with welcome, examples, disclaimer, deploy sidebar (`ui/streamlit_app.py`) |
+| 5 | Tuned params, eval fixture, tests, README, Docker, QA checklist, `deployment-plan.md`, cloud bootstrap |
+| 6 | `pipeline.py`, `ingest-daily.yml` with git auto-commit, `last_ingest.json` + `nav_snapshots` |
 
 ---
 
 ## Summary
 
-Build proceeds from **data** (Phase 1) to **API** (Phase 2), then **compliance** (Phase 3), **user-facing UI** (Phase 4), and **quality/documentation** (Phase 5). **Phase 6** adds a **GitHub Actions** workflow that triggers ingestion daily (and on demand) so corpus facts and citation dates stay current in production. Each phase has explicit tasks, acceptance criteria, and tests so progress can be verified before moving on. The plan stays within the Groww-only corpus and facts-only constraints defined in the architecture and problem statement.
+Build proceeds from **data** (Phase 1) to **API** (Phase 2), then **compliance** (Phase 3), **user-facing UI** (Phase 4), and **quality/documentation** (Phase 5). **Phase 6** adds a **GitHub Actions** workflow that re-fetches Groww pages daily, **commits refreshed `chunks.jsonl` to git**, and triggers Streamlit Cloud redeploy so NAV and scheme facts stay current. See [deployment-plan.md](./deployment-plan.md) for production deploy steps. Each phase has explicit tasks, acceptance criteria, and tests so progress can be verified before moving on. The plan stays within the Groww-only corpus and facts-only constraints defined in the architecture and problem statement.
