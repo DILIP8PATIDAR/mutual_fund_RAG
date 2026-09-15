@@ -1,14 +1,14 @@
 {
   "status": "success",
-  "started_at": "2026-09-14T10:12:12.305538+00:00",
-  "finished_at": "2026-09-14T10:12:25.161539+00:00",
+  "started_at": "2026-09-15T09:41:45.666777+00:00",
+  "finished_at": "2026-09-15T09:41:56.124288+00:00",
   "chunk_count": 68,
   "indexed": 68,
-  "duration_sec": 12.856,
+  "duration_sec": 10.458,
   "chunks_path": "/home/runner/work/mutual_fund_RAG/mutual_fund_RAG/data/processed/chunks.jsonl",
   "vector_db_path": "/home/runner/work/mutual_fund_RAG/mutual_fund_RAG/data/chroma",
   "error": null,
-  "workflow_run_id": "34831736546",
+  "workflow_run_id": "34953698349",
   "nav_snapshots": {
     "HDFC Gold ETF Fund of Fund Direct Plan Growth": "NAV \u20b947.2103 (as on 11-Sep-2026)",
     "HDFC Large Cap Fund Direct Growth": "NAV \u20b91208.624 (as on 11-Sep-2026)",
