@@ -1,19 +1,19 @@
 {
   "status": "success",
-  "started_at": "2026-10-05T11:55:15.302123+00:00",
-  "finished_at": "2026-10-05T11:55:25.279338+00:00",
+  "started_at": "2026-10-06T11:35:47.572795+00:00",
+  "finished_at": "2026-10-06T11:35:58.028852+00:00",
   "chunk_count": 68,
   "indexed": 68,
-  "duration_sec": 9.977,
+  "duration_sec": 10.456,
   "chunks_path": "/home/runner/work/mutual_fund_RAG/mutual_fund_RAG/data/processed/chunks.jsonl",
   "vector_db_path": "/home/runner/work/mutual_fund_RAG/mutual_fund_RAG/data/chroma",
   "error": null,
-  "workflow_run_id": "37305780326",
+  "workflow_run_id": "37457181496",
   "nav_snapshots": {
-    "HDFC Gold ETF Fund of Fund Direct Plan Growth": "NAV \u20b945.8219 (as on 01-Oct-2026)",
-    "HDFC Large Cap Fund Direct Growth": "NAV \u20b91151.92 (as on 01-Oct-2026)",
-    "HDFC Mid Cap Fund Direct Growth": "NAV \u20b9219.441 (as on 01-Oct-2026)",
-    "HDFC Silver ETF FOF Direct Growth": "NAV \u20b936.0336 (as on 01-Oct-2026)",
-    "HDFC Small Cap Fund Direct Growth": "NAV \u20b9155.006 (as on 01-Oct-2026)"
+    "HDFC Gold ETF Fund of Fund Direct Plan Growth": "NAV \u20b945.872 (as on 05-Oct-2026)",
+    "HDFC Large Cap Fund Direct Growth": "NAV \u20b91157.04 (as on 05-Oct-2026)",
+    "HDFC Mid Cap Fund Direct Growth": "NAV \u20b9220.493 (as on 05-Oct-2026)",
+    "HDFC Silver ETF FOF Direct Growth": "NAV \u20b936.5992 (as on 05-Oct-2026)",
+    "HDFC Small Cap Fund Direct Growth": "NAV \u20b9155.157 (as on 05-Oct-2026)"
   }
 }
